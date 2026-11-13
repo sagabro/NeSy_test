@@ -47,15 +47,16 @@ test_data = datasets.FashionMNIST(
     transform=ToTensor(),
 )
 
-BATCH_SIZE = 32
+BATCH_SIZE = 512
+NUM_WORKERS = 4
 
 train_dataloader = DataLoader(train_data,
         batch_size=BATCH_SIZE,
-        shuffle=True)
+        shuffle=True,pin_memory=torch.cuda.is_available(),persistent_workers= True if NUM_WORKERS > 0 else FALSE)
 
 test_dataloader = DataLoader(test_data,
     batch_size=BATCH_SIZE,
-    shuffle=False)
+    shuffle=False,pin_memory=torch.cuda.is_available(),persistent_workers=True if NUM_WORKERS > 0 else FALSE)
 
 train_features_batch, train_labels_batch = next(iter(train_dataloader))
 
@@ -66,7 +67,7 @@ X = train_features_batch[0]
 
 output = flatten_model(X)
 
-def model_eval(model: nn.Module, data_loader: torch.utils.data.DataLoader,loss_fn: nn.Module,accuracy_fn, device: torch.device = device):
+def model_eval(model: nn.Module, data_loader: torch.utils.data.DataLoader,loss_fn: nn.Module,accuracy_fn, device: torch.device):
     loss, acc = 0, 0
     model.eval()
     with torch.inference_mode():
@@ -83,13 +84,13 @@ def model_eval(model: nn.Module, data_loader: torch.utils.data.DataLoader,loss_f
             "model_loss": loss.item(),
             "model_acc": acc}
 
-def train_step(model: torch.nn.Module, data_loader: torch.utils.data.DataLoader, loss_fn: torch.nn.Module, optimizer: torch.optim.Optimizer, accuracy_fn, device: torch.device = device):
+def train_step(model: torch.nn.Module, data_loader: torch.utils.data.DataLoader, loss_fn: torch.nn.Module, optimizer: torch.optim.Optimizer, accuracy_fn, device: torch.device):
     model.train()
     model.to(device)
     train_loss,train_acc = 0,0
     for batch, (X,y) in enumerate(data_loader):
 
-        X,y = X.to(device), y.to(device)
+        X,y = X.to(device,non_blocking=True), y.to(device,non_blocking=True)
 
         y_pred = model(X)
 
@@ -106,14 +107,14 @@ def train_step(model: torch.nn.Module, data_loader: torch.utils.data.DataLoader,
 
     print(f"Train loss: {train_loss:.5f} | Train accuracy: {train_acc:.2f}%")
 
-def test_step(model: torch.nn.Module ,data_loader: torch.utils.data.DataLoader, loss_fn: torch.nn.Module, accuracy_fn, device: torch.device = device):
+def test_step(model: torch.nn.Module ,data_loader: torch.utils.data.DataLoader, loss_fn: torch.nn.Module, accuracy_fn, device: torch.device):
     test_loss, test_acc = 0, 0
     model.to(device)
     model.eval()
     with torch.inference_mode():
         for X,y in data_loader:
 
-            X, y = X.to(device), y.to(device)
+            X, y = X.to(device,non_blocking=True), y.to(device,non_blocking=True)
 
             y_pred = model(X)
 
@@ -154,7 +155,7 @@ class fashion_modelV2(nn.Module):
 torch.manual_seed(42)
 modelV2 = fashion_modelV2(1,10,len(class_names)).to(device)
 
-optimizer_v2 = torch.optim.SGD(params=modelV2.parameters(), lr=0.1)
+optimizer_v2 = torch.optim.Adam(params=modelV2.parameters(), lr=0.3)
 loss_fn = nn.CrossEntropyLoss()
 
 for epoch in tqdm(range(epochs)):
